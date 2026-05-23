@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor caches
+.vscode/
+.idea/
+*.swp
+*~
+
+# Local-only working files / scratch
+*.tmp
+*.log
+node_modules/
