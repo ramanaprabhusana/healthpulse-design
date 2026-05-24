@@ -86,11 +86,55 @@ discover and drop whichever PERMISSIVE SELECT policy exists on
 `Org members view audit log` — wouldn't have been guessable from the
 project's later conventions). Each file includes a ROLLBACK section.
 
+## Live admin-view verification (2026-05-24)
+
+On 2026-05-24 the published app was end-to-end verified with the org admin
+account temporarily elevated, to confirm the Phase B work renders correctly
+against the live database:
+
+- **MembersCard** (`/settings`, admin-only section) — Active members table
+  rendered with the org admin row; pending invitations panel rendered; invite
+  form (email + role + Send invitation) functional. `list_org_members` RPC
+  returned HTTP 200.
+- **AuditCard** (`/settings`, below MembersCard) — server-paginated audit log
+  rendered with the existing Phase A test rows (Create + Delete on 1990-01-01
+  metric_date), filter bar (date range + user dropdown + action chips) and
+  CSV export functional.
+- **Diff modal** — clicked "View diff" on the Delete row; modal rendered with
+  Field / Before / After columns, yellow-tint on changed rows, em-dash for
+  null After values. The `notes` field correctly displayed `=1+1` as a
+  literal string (the Phase A formula-injection test data) — confirming the
+  sanitization holds in the diff viewer too.
+
+### Key finding: `is_org_admin` is a two-layer predicate
+
+The `private.is_org_admin(uuid)` predicate (Migration 001) requires BOTH:
+
+1. `private.has_role(auth.uid(), 'admin')` — checks `public.user_roles` (the
+   global app-role table from Phase A)
+2. Membership in the target org via `public.org_members`
+
+Elevating a user to org-admin therefore requires writing to both tables.
+Future demote scripts must clear both layers, not just `org_members.role`.
+
+### `create_org_invite` end-to-end — partial pass
+
+The invite send from the elevated admin UI initially failed with `PGRST106
+Invalid schema: private` because the live deploy snapshot pre-dated the
+`supabase/config.toml` change that exposes the private schema. After clicking
+Lovable's Publish → Update once (which flushed the latest config to the live
+URL), the schema is now exposed and the footer "Last published: 2026-05-24"
+appeared on `/settings`. The end-to-end invite happy path was not re-tested
+in the same session because the elevated admin role had already been reverted
+by then — the route code is per the 2026-05-22 build; rerun on the next
+elevated session to close the loop.
+
 ## What's missing / out of scope
 
 - `send-invite` Edge Function is written but not deployed (admin uses a
   copy-link UI button until then).
-- End-to-end smoke test of the full invite happy path is pending.
+- The post-Publish retry of `create_org_invite` from an elevated admin
+  session — see the "`create_org_invite` end-to-end" note above.
 - Migration 005 (hashed invite tokens) is deferred as a future hardening
   pass; plaintext v1 is fine since tokens are server-side-only after
   creation.
